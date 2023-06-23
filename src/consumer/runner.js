@@ -227,6 +227,9 @@ module.exports = class Runner extends EventEmitter {
         break
       }
 
+      // Run a heartbeat in the background to stop consumer dropping out before they are due
+      const intervalId = setInterval(() => this.heartbeat(), this.heartbeatInterval || 3000)
+      const timeoutId = setTimeout(() => clearInterval(intervalId), this.sessionTimeout || 30000)
       try {
         await this.eachMessage({
           topic,
@@ -245,10 +248,12 @@ module.exports = class Runner extends EventEmitter {
             error: e,
           })
         }
-
         // In case of errors, commit the previously consumed offsets unless autoCommit is disabled
         await this.autoCommitOffsets()
         throw e
+      } finally {
+        clearTimeout(timeoutId)
+        clearInterval(intervalId)
       }
 
       this.consumerGroup.resolveOffset({ topic, partition, offset: message.offset })
